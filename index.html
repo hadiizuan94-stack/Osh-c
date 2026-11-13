@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#17212b"><link rel="manifest" href="manifest.webmanifest"><link rel="apple-touch-icon" href="icon-192.png"><title>OSH Tracker</title>
+<style>
+:root{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#17212b;background:#f3f5f7}
+*{box-sizing:border-box}body{margin:0}header{background:#17212b;color:white;padding:20px 16px 18px;position:sticky;top:0;z-index:2}
+h1{font-size:22px;margin:0 0 4px}header p{margin:0;color:#cbd5df;font-size:13px}
+main{max-width:760px;margin:auto;padding:14px 12px 40px}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:0 0 14px}
+.stat,.panel,.task{background:white;border:1px solid #e0e5ea;border-radius:14px;padding:12px}
+.stat b{font-size:22px;display:block}.stat span{font-size:11px;color:#65717c}
+.panel{margin-bottom:12px}.panel h2{font-size:16px;margin:0 0 12px}
+label{font-size:12px;font-weight:650;display:block;margin:9px 0 5px}
+input,select,textarea,button{font:inherit}input,select,textarea{width:100%;padding:11px;border:1px solid #cbd3dc;border-radius:9px;background:#fff;color:#17212b}
+textarea{min-height:68px;resize:vertical}.row{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+button{border:0;border-radius:10px;padding:11px 13px;font-weight:650;cursor:pointer}
+.primary{background:#17212b;color:white;width:100%;margin-top:12px}.secondary{background:#e9eef3;color:#17212b}.danger{background:#fff0f0;color:#a32323}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.actions button{flex:1}
+.filters{display:flex;gap:6px;overflow:auto;margin:10px 0}.filters button{white-space:nowrap;background:#e7ebef;color:#293642}.filters button.active{background:#17212b;color:white}
+.task{margin:9px 0}.tasktop{display:flex;justify-content:space-between;gap:10px;align-items:start}.task h3{font-size:15px;margin:0 0 6px}.meta{font-size:12px;color:#596672;line-height:1.55}.pill{font-size:11px;font-weight:700;border-radius:99px;padding:5px 8px;white-space:nowrap}.Complete{background:#e3f5e9;color:#176c37}.Ongoing{background:#fff2d7;color:#875900}.Pending{background:#ffe7e7;color:#9b2424}
+.empty{text-align:center;color:#6d7882;padding:25px 8px}.small{font-size:11px;color:#68737e;line-height:1.45}.hidden{display:none!important}
+@media(max-width:390px){.stats{grid-template-columns:repeat(2,1fr)}.row{grid-template-columns:1fr}}
+</style></head>
+<body>
+<header><h1>OSH Task Tracker</h1><p>Personal records · Stored on this device</p></header>
+<main>
+<div class="stats">
+<div class="stat"><b id="total">0</b><span>Total tasks</span></div>
+<div class="stat"><b id="complete">0</b><span>Complete</span></div>
+<div class="stat"><b id="ongoing">0</b><span>Ongoing</span></div>
+<div class="stat"><b id="pending">0</b><span>Pending</span></div>
+</div>
+<section class="panel">
+<h2 id="formTitle">Add task</h2>
+<form id="taskForm">
+<input id="editId" type="hidden">
+<label for="task">Task / Activity *</label><textarea id="task" required placeholder="e.g. Hearing conservation briefing"></textarea>
+<div class="row">
+<div><label for="pic">PIC *</label><input id="pic" required placeholder="Person in charge"></div>
+<div><label for="department">Department</label><input id="department" placeholder="e.g. Production"></div>
+</div>
+<div class="row">
+<div><label for="deadline">Deadline</label><input id="deadline" type="date"></div>
+<div><label for="completedDate">Date completed</label><input id="completedDate" type="date"></div>
+</div>
+<div class="row">
+<div><label for="attendance">Attendance</label><input id="attendance" placeholder="e.g. 12 persons / names"></div>
+<div><label for="status">Status</label><select id="status"><option>Pending</option><option>Ongoing</option><option>Complete</option></select></div>
+</div>
+<label for="priority">Priority</label><select id="priority"><option>Normal</option><option>High</option><option>Critical</option></select>
+<label for="evidence">Evidence photo (optional)</label><input id="evidence" type="file" accept="image/*" capture="environment">
+<p class="small">Photo is saved with this task on this device. Large photos may use phone storage.</p>
+<button class="primary" type="submit" id="saveBtn">Save task</button>
+<div class="actions"><button class="secondary hidden" type="button" id="cancelEdit">Cancel edit</button></div>
+</form></section>
+<section class="panel">
+<h2>Task records</h2>
+<input id="search" placeholder="Search task, PIC or department…">
+<div class="filters" id="filters">
+<button class="active" data-filter="All">All</button><button data-filter="Pending">Pending</button><button data-filter="Ongoing">Ongoing</button><button data-filter="Complete">Complete</button>
+</div>
+<div id="records"></div>
+</section>
+<section class="panel">
+<h2>Backup & restore</h2>
+<p class="small">Export a backup regularly. Records are kept in this browser on this phone; clearing browser data or uninstalling/resetting the browser may erase them. Backup files are not encrypted.</p>
+<div class="actions"><button class="secondary" id="exportJson">Export backup</button><button class="secondary" id="exportCsv">Export CSV</button></div>
+<label for="importFile">Restore from backup (.json)</label><input type="file" id="importFile" accept="application/json">
+</section>
+<p class="small">Personal-use tracker. It is not an official JKKP system and does not replace statutory records or approved forms.</p>
+</main>
+<script>
+const DB='oshTrackerLocalV1';let items=[];let filter='All';let photoData='';
+const $=id=>document.getElementById(id);
+function load(){try{items=JSON.parse(localStorage.getItem(DB)||'[]')}catch(e){items=[]}render()}
+function persist(){localStorage.setItem(DB,JSON.stringify(items));render()}
+function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function render(){
+$('total').textContent=items.length;$('complete').textContent=items.filter(x=>x.status==='Complete').length;$('ongoing').textContent=items.filter(x=>x.status==='Ongoing').length;$('pending').textContent=items.filter(x=>x.status==='Pending').length;
+const q=$('search').value.toLowerCase();let list=items.filter(x=>(filter==='All'||x.status===filter)&&[x.task,x.pic,x.department,x.attendance].join(' ').toLowerCase().includes(q));
+$('records').innerHTML=list.length?list.slice().sort((a,b)=>b.updated-a.updated).map(x=>`<article class="task"><div class="tasktop"><div><h3>${esc(x.task)}</h3><div class="meta">PIC: ${esc(x.pic)}${x.department?' · '+esc(x.department):''}<br>Deadline: ${esc(x.deadline||'—')} · Completed: ${esc(x.completedDate||'—')}<br>Attendance: ${esc(x.attendance||'—')} · Priority: ${esc(x.priority||'Normal')}</div></div><span class="pill ${x.status}">${x.status}</span></div>${x.photo?`<p><a href="${x.photo}" target="_blank">View evidence photo</a></p>`:''}<div class="actions"><button class="secondary" onclick="editTask('${x.id}')">Edit</button><button class="danger" onclick="deleteTask('${x.id}')">Delete</button></div></article>`).join(''):'<div class="empty">No task records yet.</div>';
+document.querySelectorAll('[data-filter]').forEach(b=>b.classList.toggle('active',b.dataset.filter===filter));
+}
+function resetForm(){$('taskForm').reset();$('editId').value='';$('formTitle').textContent='Add task';$('saveBtn').textContent='Save task';$('cancelEdit').classList.add('hidden');photoData=''}
+$('evidence').addEventListener('change',e=>{const f=e.target.files[0];if(!f){photoData='';return}if(f.size>2*1024*1024){alert('Please choose a photo under 2 MB.');e.target.value='';return}const r=new FileReader();r.onload=()=>photoData=r.result;r.readAsDataURL(f)});
+$('taskForm').addEventListener('submit',e=>{e.preventDefault();const id=$('editId').value||crypto.randomUUID();const old=items.find(x=>x.id===id);const status=$('status').value;const obj={id,task:$('task').value.trim(),pic:$('pic').value.trim(),department:$('department').value.trim(),deadline:$('deadline').value,completedDate:status==='Complete'?($('completedDate').value||new Date().toISOString().slice(0,10)):'',attendance:$('attendance').value.trim(),status,priority:$('priority').value,photo:photoData||old?.photo||'',updated:Date.now()};items=old?items.map(x=>x.id===id?obj:x):[obj,...items];persist();resetForm()});
+window.editTask=id=>{const x=items.find(i=>i.id===id);if(!x)return;$('editId').value=x.id;$('task').value=x.task;$('pic').value=x.pic;$('department').value=x.department||'';$('deadline').value=x.deadline||'';$('completedDate').value=x.completedDate||'';$('attendance').value=x.attendance||'';$('status').value=x.status;$('priority').value=x.priority||'Normal';photoData='';$('formTitle').textContent='Edit task';$('saveBtn').textContent='Update task';$('cancelEdit').classList.remove('hidden');window.scrollTo({top:0,behavior:'smooth'})};
+window.deleteTask=id=>{if(confirm('Delete this task record?')){items=items.filter(x=>x.id!==id);persist()}};
+$('cancelEdit').onclick=resetForm;$('search').oninput=render;
+$('filters').onclick=e=>{const b=e.target.closest('[data-filter]');if(b){filter=b.dataset.filter;render()}};
+function download(name,content,type){const a=document.createElement('a'),u=URL.createObjectURL(new Blob([content],{type}));a.href=u;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(u),1000)}
+$('exportJson').onclick=()=>download('OSH_Tracker_Backup_'+new Date().toISOString().slice(0,10)+'.json',JSON.stringify(items,null,2),'application/json');
+$('exportCsv').onclick=()=>{const cols=['task','pic','department','deadline','completedDate','attendance','status','priority'];const rows=[cols.join(','),...items.map(x=>cols.map(k=>'"'+String(x[k]??'').replace(/"/g,'""')+'"').join(','))];download('OSH_Tracker_'+new Date().toISOString().slice(0,10)+'.csv','\ufeff'+rows.join('\r\n'),'text/csv;charset=utf-8')};
+$('importFile').onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const data=JSON.parse(r.result);if(!Array.isArray(data))throw Error();if(confirm('Restore backup? This replaces the records currently on this phone.')){items=data;persist();alert('Backup restored.')}}catch(err){alert('Invalid backup file.')}e.target.value=''};r.readAsText(f)};
+load();
+</script><script>
+if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(()=>{}));
+}
+</script>
+</body></html>
